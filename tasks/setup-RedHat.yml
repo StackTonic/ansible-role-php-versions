@@ -1,6 +1,4 @@
 ---
-# TODO: PHP 7.2 support will be removed soon. This is only being left in here as
-# a convenience for legacy PHP 7.2 users.
 - name: Enable remi repo for PHP 7.2.
   set_fact: php_enablerepo="remi,remi-php72"
   when: php_version == "7.2"
@@ -13,27 +11,51 @@
   set_fact: php_enablerepo="remi,remi-php74"
   when: php_version == "7.4"
 
-- name: Enable remi repo for PHP 8.0.
-  set_fact: php_enablerepo="remi,remi-php80"
-  when: php_version == "8.0"
+- name: Ensure dnf-plugins are installed on CentOS 8+.
+  yum:
+    name: dnf-plugins-core
+    state: present
 
-# See: https://github.com/ansible/ansible/issues/64852
-- block:
+- name: Gather the package facts
+  ansible.builtin.package_facts:
+    manager: auto
 
-  - name: Ensure dnf-plugins are installed on CentOS 8+.
-    yum:
-      name: dnf-plugins-core
-      state: present
 
-  - name: Enable DNF module for CentOS 8+.
-    shell: |
-      dnf config-manager --set-enabled powertools
-      dnf module enable -y php:remi-{{ php_version }}
-    args:
-      warn: false
-    register: dnf_module_enable
-    changed_when: "'Nothing to do' not in dnf_module_enable.stdout"
+- name: Reset DNF module for RedHat 8+.
+  shell: |
+    dnf module reset -y php
+  args:
+    warn: false
+  register: dnf_module_enable
+  changed_when: "'Nothing to do' not in dnf_module_enable.stdout"
+  when:
+    - ansible_os_family == 'RedHat'
+    - ansible_distribution_major_version | int >= 8
+    - "'php' in ansible_facts.packages"
+    - ansible_facts.packages['php'][0]['version']  is version(php_version, '!=')
 
+
+
+
+- name: Enable DNF module for CentOS 8+.
+  shell: |
+    dnf config-manager --set-enabled PowerTools
+  args:
+    warn: false
+  register: dnf_module_enable
+  changed_when: "'Nothing to do' not in dnf_module_enable.stdout"
+  when:
+    - ansible_os_family == 'RedHat'
+    - ansible_distribution == 'CentOS'
+    - ansible_distribution_major_version | int >= 8
+
+- name: Enable DNF module for RedHat 8+.
+  shell: |
+    dnf module enable -y php:remi-{{ php_version }}
+  args:
+    warn: false
+  register: dnf_module_enable
+  changed_when: "'Nothing to do' not in dnf_module_enable.stdout"
   when:
     - ansible_os_family == 'RedHat'
     - ansible_distribution_major_version | int >= 8
